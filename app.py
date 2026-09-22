@@ -91,6 +91,30 @@ def db_lookup_cashflow(ticker: str) -> dict[str, str]:
     return {r["date"]: r["content"] for r in rows}
 
 
+def db_lookup_peer_smdt_by_date(branch_path: str, exclude_ticker: str) -> dict[str, list[float]]:
+    """Cho tung ngay, tra ve danh sach SMDT cua cac ma KHAC cung nganh (peer) -
+    du lieu nay da co san trong bang smdt_ticker (khong can goi them API nao)."""
+    conn = get_db()
+    peer_rows = conn.execute(
+        "SELECT ticker FROM tickers WHERE branch_path = ? AND ticker != ?",
+        (branch_path, exclude_ticker),
+    ).fetchall()
+    peer_tickers = [r["ticker"] for r in peer_rows]
+    if not peer_tickers:
+        conn.close()
+        return {}
+    placeholders = ",".join("?" * len(peer_tickers))
+    rows = conn.execute(
+        f"SELECT date, smdt FROM smdt_ticker WHERE ticker IN ({placeholders})",
+        peer_tickers,
+    ).fetchall()
+    conn.close()
+    by_date: dict[str, list[float]] = {}
+    for r in rows:
+        by_date.setdefault(r["date"], []).append(r["smdt"])
+    return by_date
+
+
 def db_lookup_smdt_branch(branch_path: str) -> list[tuple[str, float]]:
     conn = get_db()
     rows = conn.execute(
@@ -180,11 +204,10 @@ CASHFLOW_MAP = {
 SCORE_WEIGHTS = {
     "smdt_vs_nganh": 32.0,
     "smdt_delta": 30.0,
+    "smdt_rank": 18.0,
     "gia_dong_luong": 10.0,
     "dong_tien": 10.0,
 }
-# smdt_rank (18% trong cong thuc goc) bo qua o day - can du lieu SMDT cua toan bo
-# ma cung nganh tung ngay de xep hang, chua fetch/luu trong data.db.
 
 
 def normalize_series(values: list[float]) -> list[float]:
@@ -214,9 +237,10 @@ def compute_scores(
     branch_vals: list[float],
     price_map: dict[str, float],
     cashflow_map: dict[str, str],
+    peer_smdt_by_date: dict[str, list[float]],
 ) -> dict[str, dict]:
     """Composite Score (0-100), giong cong thuc goc trong stock_4key_evaluator.py,
-    TRU yeu to smdt_rank (18%, can du lieu peer chua co san)."""
+    bao gom ca yeu to smdt_rank (18%, xep hang so voi cac ma cung nganh)."""
     n = len(dates)
     smdt_vs_nganh_vals = [ticker_vals[i] - branch_vals[i] for i in range(n)]
     delta_vals = [
@@ -225,6 +249,17 @@ def compute_scores(
     ]
     vs_scores = normalize_series(smdt_vs_nganh_vals)
     delta_scores = normalize_series(delta_vals)
+
+    rank_scores: list[Optional[float]] = [None] * n
+    rank_peer_count: list[int] = [0] * n
+    for i in range(n):
+        peers = peer_smdt_by_date.get(dates[i]) or []
+        if not peers:
+            continue
+        combined = peers + [ticker_vals[i]]
+        normed = normalize_series(combined)
+        rank_scores[i] = normed[-1]
+        rank_peer_count[i] = len(peers)
 
     price_series = [price_map.get(d) for d in dates]
     has_price = any(v is not None for v in price_series)
@@ -248,6 +283,13 @@ def compute_scores(
             "smdt_delta": round(delta_scores[i], 1),
         }
         weighted_sum = active_weights["smdt_vs_nganh"] * vs_scores[i] + active_weights["smdt_delta"] * delta_scores[i]
+
+        if rank_scores[i] is None:
+            active_weights.pop("smdt_rank", None)
+        else:
+            weighted_sum += active_weights["smdt_rank"] * rank_scores[i]
+            breakdown["smdt_rank"] = round(rank_scores[i], 1)
+            breakdown["smdt_rank_peer_count"] = rank_peer_count[i]
 
         if not has_price or price_scores[i] is None:
             active_weights.pop("gia_dong_luong", None)
@@ -311,7 +353,8 @@ def evaluate(ticker: str) -> dict:
 
     price_map = dict(db_lookup_price(ticker))
     cashflow_map = db_lookup_cashflow(ticker)
-    scores_by_date = compute_scores(dates, ticker_vals, branch_vals, price_map, cashflow_map)
+    peer_smdt_by_date = db_lookup_peer_smdt_by_date(branch["path"], ticker)
+    scores_by_date = compute_scores(dates, ticker_vals, branch_vals, price_map, cashflow_map, peer_smdt_by_date)
     for r in display_rows:
         s = scores_by_date.get(r["date"])
         if s:
@@ -713,24 +756,24 @@ async function render(sym){
 
     const bd = r.score_breakdown || {};
     const hasPrice = bd.gia_dong_luong !== undefined;
+    const hasRank = bd.smdt_rank !== undefined;
     const scorePane = `
       <div class="detail-pane" id="paneScore">
         <div class="detail-card">
-          <h4>4 yếu tố tính điểm (Composite Score)</h4>
+          <h4>5 yếu tố tính điểm (Composite Score)</h4>
           <p><b>SMDT so với ngành</b> (trọng số 32%): giá trị gốc = SMDT mã − SMDT ngành = ${fmt2(r.smdt_ticker)} − ${fmt2(r.smdt_branch)} = <span class="num">${fmt(r.smdt_ticker - r.smdt_branch)}</span>. Sau khi chuẩn hóa 0-100 theo lịch sử → điểm = <span class="num">${bd.smdt_vs_nganh}</span>.</p>
           <p><b>Động lượng SMDT</b> (trọng số 30%): delta mã 3 phiên = <span class="num">${fmt(r.delta_ticker)}%</span>. Sau khi chuẩn hóa 0-100 → điểm = <span class="num">${bd.smdt_delta}</span>.</p>
+          ${hasRank
+            ? `<p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18%): so SMDT mã với SMDT cùng ngày của <span class="num">${bd.smdt_rank_peer_count}</span> mã cùng ngành, chuẩn hóa 0-100 theo vị trí trong nhóm → điểm = <span class="num">${bd.smdt_rank}</span>.</p>`
+            : `<p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18%): <i>không có mã cùng ngành nào có dữ liệu SMDT cho ngày này</i> → bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
           ${hasPrice
             ? `<p><b>Động lượng giá</b> (trọng số 10%): lợi nhuận giá 1 ngày = <span class="num">${bd.gia_return_1d_pct}%</span>. Sau khi chuẩn hóa 0-100 → điểm = <span class="num">${bd.gia_dong_luong}</span>.</p>`
             : `<p><b>Động lượng giá</b> (trọng số 10%): <i>không có dữ liệu giá cho ngày này</i> → bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
           <p><b>Dòng tiền</b> (trọng số 10%): tín hiệu ${bd.dong_tien_label ? `"${bd.dong_tien_label}"` : "không có dữ liệu (mặc định trung lập)"} → điểm = <span class="num">${bd.dong_tien}</span>.</p>
         </div>
         <div class="detail-card">
-          <h4>Yếu tố bị bỏ qua</h4>
-          <p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18% trong công thức gốc): <i>chưa có dữ liệu SMDT của các mã cùng ngành tại từng ngày trong data.db</i> → tạm bỏ qua, dồn trọng số sang 4 yếu tố còn lại.</p>
-        </div>
-        <div class="detail-card">
           <h4>Công thức tổng</h4>
-          <p>Score = (SMDT_vs_ngành×32 + Động_lượng_SMDT×30${hasPrice ? " + Động_lượng_giá×10" : ""} + Dòng_tiền×10) ÷ tổng_trọng_số_đang_dùng</p>
+          <p>Score = (SMDT_vs_ngành×32 + Động_lượng_SMDT×30${hasRank ? " + Xếp_hạng_cùng_ngành×18" : ""}${hasPrice ? " + Động_lượng_giá×10" : ""} + Dòng_tiền×10) ÷ tổng_trọng_số_đang_dùng</p>
           <p>Xếp hạng: ≥70 MUA MẠNH · ≥55 MUA · ≥45 TRUNG LẬP · ≥30 BÁN · &lt;30 BÁN MẠNH</p>
           <div class="detail-conclusion">Score = <span class="num">${r.score !== undefined ? r.score.toFixed(1) : "—"}</span> → ${ratingBadge(r.score, r.rating)}</div>
         </div>
