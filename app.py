@@ -73,6 +73,24 @@ def db_lookup_smdt_ticker(ticker: str) -> list[tuple[str, float]]:
     return [(r["date"], r["smdt"]) for r in rows]
 
 
+def db_lookup_price(ticker: str) -> list[tuple[str, float]]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT date, close FROM price_ticker WHERE ticker = ? ORDER BY date", (ticker,)
+    ).fetchall()
+    conn.close()
+    return [(r["date"], r["close"]) for r in rows]
+
+
+def db_lookup_cashflow(ticker: str) -> dict[str, str]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT date, content FROM cashflow_ticker WHERE ticker = ? ORDER BY date", (ticker,)
+    ).fetchall()
+    conn.close()
+    return {r["date"]: r["content"] for r in rows}
+
+
 def db_lookup_smdt_branch(branch_path: str) -> list[tuple[str, float]]:
     conn = get_db()
     rows = conn.execute(
@@ -155,6 +173,104 @@ def compute_rows(dates: list[str], ticker_vals: list[float], branch_vals: list[f
     return rows
 
 
+CASHFLOW_MAP = {
+    "Tiếp tục đổ vào": 1.0, "Đang đổ vào": 1.0, "Nhen nhóm đổ vào": 0.5,
+    "Tiếp tục thoát ra": -1.0, "Đang thoát ra": -1.0, "Bắt đầu thoát ra": -0.5,
+}
+SCORE_WEIGHTS = {
+    "smdt_vs_nganh": 32.0,
+    "smdt_delta": 30.0,
+    "gia_dong_luong": 10.0,
+    "dong_tien": 10.0,
+}
+# smdt_rank (18% trong cong thuc goc) bo qua o day - can du lieu SMDT cua toan bo
+# ma cung nganh tung ngay de xep hang, chua fetch/luu trong data.db.
+
+
+def normalize_series(values: list[float]) -> list[float]:
+    if not values:
+        return []
+    lo, hi = min(values), max(values)
+    if hi == lo:
+        return [50.0] * len(values)
+    return [(v - lo) / (hi - lo) * 100.0 for v in values]
+
+
+def rating_of(score: float) -> str:
+    if score >= 70:
+        return "MUA MẠNH"
+    if score >= 55:
+        return "MUA"
+    if score >= 45:
+        return "TRUNG LẬP"
+    if score >= 30:
+        return "BÁN"
+    return "BÁN MẠNH"
+
+
+def compute_scores(
+    dates: list[str],
+    ticker_vals: list[float],
+    branch_vals: list[float],
+    price_map: dict[str, float],
+    cashflow_map: dict[str, str],
+) -> dict[str, dict]:
+    """Composite Score (0-100), giong cong thuc goc trong stock_4key_evaluator.py,
+    TRU yeu to smdt_rank (18%, can du lieu peer chua co san)."""
+    n = len(dates)
+    smdt_vs_nganh_vals = [ticker_vals[i] - branch_vals[i] for i in range(n)]
+    delta_vals = [
+        (ticker_vals[i] - ticker_vals[i - LOOKBACK]) if i >= LOOKBACK else 0.0
+        for i in range(n)
+    ]
+    vs_scores = normalize_series(smdt_vs_nganh_vals)
+    delta_scores = normalize_series(delta_vals)
+
+    price_series = [price_map.get(d) for d in dates]
+    has_price = any(v is not None for v in price_series)
+    price_scores: list[Optional[float]] = [None] * n
+    one_day_returns: list[Optional[float]] = [None] * n
+    if has_price:
+        returns = []
+        for i in range(1, n):
+            prev_p, cur_p = price_series[i - 1], price_series[i]
+            returns.append((cur_p / prev_p - 1.0) if (prev_p and cur_p is not None) else 0.0)
+        norm_returns = normalize_series(returns)
+        for i in range(1, n):
+            one_day_returns[i] = returns[i - 1]
+            price_scores[i] = norm_returns[i - 1]
+
+    out: dict[str, dict] = {}
+    for i in range(n):
+        active_weights = dict(SCORE_WEIGHTS)
+        breakdown = {
+            "smdt_vs_nganh": round(vs_scores[i], 1),
+            "smdt_delta": round(delta_scores[i], 1),
+        }
+        weighted_sum = active_weights["smdt_vs_nganh"] * vs_scores[i] + active_weights["smdt_delta"] * delta_scores[i]
+
+        if not has_price or price_scores[i] is None:
+            active_weights.pop("gia_dong_luong", None)
+        else:
+            weighted_sum += active_weights["gia_dong_luong"] * price_scores[i]
+            breakdown["gia_dong_luong"] = round(price_scores[i], 1)
+            breakdown["gia_return_1d_pct"] = round(one_day_returns[i] * 100.0, 2)
+
+        cf_content = cashflow_map.get(dates[i])
+        if cf_content and cf_content in CASHFLOW_MAP:
+            cf_score = (CASHFLOW_MAP[cf_content] + 1.0) / 2.0 * 100.0
+            breakdown["dong_tien_label"] = cf_content
+        else:
+            cf_score = 50.0
+        weighted_sum += active_weights["dong_tien"] * cf_score
+        breakdown["dong_tien"] = round(cf_score, 1)
+
+        total_w = sum(active_weights.values())
+        score = max(0.0, min(100.0, weighted_sum / total_w)) if total_w else 0.0
+        out[dates[i]] = {"score": round(score, 1), "rating": rating_of(score), "breakdown": breakdown}
+    return out
+
+
 def flips_stats(rows: list[dict], field: str) -> dict:
     valid = [r[field] for r in rows]
     flips = sum(1 for i in range(1, len(valid)) if valid[i] != valid[i - 1])
@@ -192,6 +308,16 @@ def evaluate(ticker: str) -> dict:
     all_rows = compute_rows(dates, ticker_vals, branch_vals)
     valid_rows = [r for r in all_rows if r is not None]
     display_rows = valid_rows[-DISPLAY_SESSIONS:]
+
+    price_map = dict(db_lookup_price(ticker))
+    cashflow_map = db_lookup_cashflow(ticker)
+    scores_by_date = compute_scores(dates, ticker_vals, branch_vals, price_map, cashflow_map)
+    for r in display_rows:
+        s = scores_by_date.get(r["date"])
+        if s:
+            r["score"] = s["score"]
+            r["rating"] = s["rating"]
+            r["score_breakdown"] = s["breakdown"]
 
     old_stats = flips_stats(display_rows, "old_group")
     new_stats = flips_stats(display_rows, "new_group")
@@ -399,6 +525,15 @@ const KEYS_CLASS = {
 function fmt(v){ return (v>=0?"+":"") + v.toFixed(2); }
 function fmt2(v){ return v.toFixed(2); }
 function badge(name){ return `<span class="badge ${KEYS_CLASS[name]||''}">${name}</span>`; }
+const RATING_CLASS = {
+  "MUA MẠNH": "b-good", "MUA": "b-good",
+  "TRUNG LẬP": "b-warn",
+  "BÁN": "b-bad", "BÁN MẠNH": "b-bad",
+};
+function ratingBadge(score, rating){
+  if (score === undefined || score === null) return `<span class="flag">—</span>`;
+  return `<span class="badge ${RATING_CLASS[rating]||''}">${score.toFixed(1)} (${rating})</span>`;
+}
 function dmy(iso){ const [y,m,d]=iso.split("-"); return `${d}/${m}`; }
 function renderSortedList(sorted, pickIdx){
   return sorted.map((v,i) => i===pickIdx ? `<span class="pick">${v.toFixed(2)}</span>` : v.toFixed(2)).join(", ");
@@ -469,7 +604,7 @@ async function render(sym){
     const mk = monthKeys[mIdx];
     let thead = `<tr>
       <th>Ngày</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
-      <th>Key — cách cũ</th><th>Key — cách mới</th>
+      <th>Key — cách cũ</th><th>Key — cách mới</th><th>Score</th>
     </tr>`;
     let tbody = "";
     rows.forEach((r, i) => {
@@ -484,6 +619,7 @@ async function render(sym){
         <td class="num">${r.threshold_branch.toFixed(2)} <span class="flag">(${r.used_branch_threshold?"cập nhật":"giữ nguyên"})</span></td>
         <td>${badge(r.old_group)}</td>
         <td>${badge(r.new_group)}</td>
+        <td>${ratingBadge(r.score, r.rating)}</td>
       </tr>`;
     });
     tableEl.innerHTML = thead + tbody;

@@ -1,0 +1,5 @@
+data.db
+build_log*.txt
+flask_test*.log
+__pycache__/
+*.pyc
