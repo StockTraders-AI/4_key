@@ -711,6 +711,31 @@ async function render(sym){
         </div>
       </div>`;
 
+    const bd = r.score_breakdown || {};
+    const hasPrice = bd.gia_dong_luong !== undefined;
+    const scorePane = `
+      <div class="detail-pane" id="paneScore">
+        <div class="detail-card">
+          <h4>4 yếu tố tính điểm (Composite Score)</h4>
+          <p><b>SMDT so với ngành</b> (trọng số 32%): giá trị gốc = SMDT mã − SMDT ngành = ${fmt2(r.smdt_ticker)} − ${fmt2(r.smdt_branch)} = <span class="num">${fmt(r.smdt_ticker - r.smdt_branch)}</span>. Sau khi chuẩn hóa 0-100 theo lịch sử → điểm = <span class="num">${bd.smdt_vs_nganh}</span>.</p>
+          <p><b>Động lượng SMDT</b> (trọng số 30%): delta mã 3 phiên = <span class="num">${fmt(r.delta_ticker)}%</span>. Sau khi chuẩn hóa 0-100 → điểm = <span class="num">${bd.smdt_delta}</span>.</p>
+          ${hasPrice
+            ? `<p><b>Động lượng giá</b> (trọng số 10%): lợi nhuận giá 1 ngày = <span class="num">${bd.gia_return_1d_pct}%</span>. Sau khi chuẩn hóa 0-100 → điểm = <span class="num">${bd.gia_dong_luong}</span>.</p>`
+            : `<p><b>Động lượng giá</b> (trọng số 10%): <i>không có dữ liệu giá cho ngày này</i> → bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
+          <p><b>Dòng tiền</b> (trọng số 10%): tín hiệu ${bd.dong_tien_label ? `"${bd.dong_tien_label}"` : "không có dữ liệu (mặc định trung lập)"} → điểm = <span class="num">${bd.dong_tien}</span>.</p>
+        </div>
+        <div class="detail-card">
+          <h4>Yếu tố bị bỏ qua</h4>
+          <p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18% trong công thức gốc): <i>chưa có dữ liệu SMDT của các mã cùng ngành tại từng ngày trong data.db</i> → tạm bỏ qua, dồn trọng số sang 4 yếu tố còn lại.</p>
+        </div>
+        <div class="detail-card">
+          <h4>Công thức tổng</h4>
+          <p>Score = (SMDT_vs_ngành×32 + Động_lượng_SMDT×30${hasPrice ? " + Động_lượng_giá×10" : ""} + Dòng_tiền×10) ÷ tổng_trọng_số_đang_dùng</p>
+          <p>Xếp hạng: ≥70 MUA MẠNH · ≥55 MUA · ≥45 TRUNG LẬP · ≥30 BÁN · &lt;30 BÁN MẠNH</p>
+          <div class="detail-conclusion">Score = <span class="num">${r.score !== undefined ? r.score.toFixed(1) : "—"}</span> → ${ratingBadge(r.score, r.rating)}</div>
+        </div>
+      </div>`;
+
     const html = `
       <div class="detail">
         <button class="close-detail" id="closeDetail">Đóng ✕</button>
@@ -719,9 +744,11 @@ async function render(sym){
         <div class="detail-tabs">
           <div class="detail-tab active" data-pane="paneNew">Cách tính đề xuất</div>
           <div class="detail-tab" data-pane="paneOld">Cách tính hiện tại</div>
+          <div class="detail-tab" data-pane="paneScore">Cách tính Score</div>
         </div>
         ${newPane}
         ${oldPane}
+        ${scorePane}
       </div>`;
     const panel = document.getElementById("detailPanel");
     panel.innerHTML = html;
