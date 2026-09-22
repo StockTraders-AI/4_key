@@ -757,25 +757,31 @@ async function render(sym){
     const bd = r.score_breakdown || {};
     const hasPrice = bd.gia_dong_luong !== undefined;
     const hasRank = bd.smdt_rank !== undefined;
+    const lvl = v => v>=80?"rất mạnh":v>=60?"mạnh":v>=40?"trung bình":v>=20?"yếu":"rất yếu";
+    const diffTicker = fmt(r.smdt_ticker - r.smdt_branch);
+    const diffWord = (r.smdt_ticker - r.smdt_branch) >= 0 ? "nhiều hơn" : "ít hơn";
+    const deltaWord = r.delta_ticker >= 0 ? "tăng thêm" : "giảm mất";
+    const priceWord = (bd.gia_return_1d_pct ?? 0) >= 0 ? "tăng" : "giảm";
     const scorePane = `
       <div class="detail-pane" id="paneScore">
         <div class="detail-card">
           <h4>5 yếu tố tính điểm (Composite Score)</h4>
-          <p><b>SMDT so với ngành</b> (trọng số 32%): giá trị gốc = SMDT mã − SMDT ngành = ${fmt2(r.smdt_ticker)} − ${fmt2(r.smdt_branch)} = <span class="num">${fmt(r.smdt_ticker - r.smdt_branch)}</span>. Sau khi chuẩn hóa 0-100 theo lịch sử → điểm = <span class="num">${bd.smdt_vs_nganh}</span>.</p>
-          <p><b>Động lượng SMDT</b> (trọng số 30%): delta mã 3 phiên = <span class="num">${fmt(r.delta_ticker)}%</span>. Sau khi chuẩn hóa 0-100 → điểm = <span class="num">${bd.smdt_delta}</span>.</p>
+          <p class="detail-sub">Mỗi yếu tố dưới đây được quy về thang <b>0-100</b> để so sánh công bằng: 100 = tốt nhất trong nhóm so sánh (lịch sử hoặc các mã cùng ngành), 0 = kém nhất, 50 = trung bình. Điểm càng cao càng tích cực cho mã.</p>
+          <p><b>Dòng tiền vào mã so với vào ngành</b> (trọng số 32%): dòng tiền vào mã đang <b>${diffWord}</b> dòng tiền vào cả ngành (chênh lệch ${diffTicker}). So với 3 tháng gần đây, mức chênh lệch này thuộc nhóm <b>${lvl(bd.smdt_vs_nganh)}</b> (điểm quy đổi ${bd.smdt_vs_nganh}/100).</p>
+          <p><b>Đà tăng/giảm dòng tiền vào mã</b> (trọng số 30%): so với 3 phiên trước, dòng tiền vào mã <b>${deltaWord} ${fmt2(Math.abs(r.delta_ticker))}%</b>. So với lịch sử, mức thay đổi này thuộc nhóm <b>${lvl(bd.smdt_delta)}</b> (điểm quy đổi ${bd.smdt_delta}/100).</p>
           ${hasRank
-            ? `<p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18%): so SMDT mã với SMDT cùng ngày của <span class="num">${bd.smdt_rank_peer_count}</span> mã cùng ngành, chuẩn hóa 0-100 theo vị trí trong nhóm → điểm = <span class="num">${bd.smdt_rank}</span>.</p>`
-            : `<p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18%): <i>không có mã cùng ngành nào có dữ liệu SMDT cho ngày này</i> → bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
+            ? `<p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18%): so với <b>${bd.smdt_rank_peer_count}</b> mã khác cùng ngành trong cùng ngày, dòng tiền vào mã này thuộc nhóm <b>${lvl(bd.smdt_rank)}</b> trong ngành (điểm quy đổi ${bd.smdt_rank}/100 — càng cao nghĩa là xếp hạng càng tốt trong ngành).</p>`
+            : `<p><b>Xếp hạng so với mã cùng ngành</b> (trọng số 18%): <i>không có mã cùng ngành nào có dữ liệu cho ngày này</i> → tạm bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
           ${hasPrice
-            ? `<p><b>Động lượng giá</b> (trọng số 10%): lợi nhuận giá 1 ngày = <span class="num">${bd.gia_return_1d_pct}%</span>. Sau khi chuẩn hóa 0-100 → điểm = <span class="num">${bd.gia_dong_luong}</span>.</p>`
-            : `<p><b>Động lượng giá</b> (trọng số 10%): <i>không có dữ liệu giá cho ngày này</i> → bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
-          <p><b>Dòng tiền</b> (trọng số 10%): tín hiệu ${bd.dong_tien_label ? `"${bd.dong_tien_label}"` : "không có dữ liệu (mặc định trung lập)"} → điểm = <span class="num">${bd.dong_tien}</span>.</p>
+            ? `<p><b>Đà tăng/giảm giá</b> (trọng số 10%): giá ${priceWord} <b>${fmt2(Math.abs(bd.gia_return_1d_pct))}%</b> trong phiên gần nhất. So với lịch sử, mức thay đổi này thuộc nhóm <b>${lvl(bd.gia_dong_luong)}</b> (điểm quy đổi ${bd.gia_dong_luong}/100).</p>`
+            : `<p><b>Đà tăng/giảm giá</b> (trọng số 10%): <i>không có dữ liệu giá cho ngày này</i> → tạm bỏ yếu tố này, dồn trọng số sang các yếu tố còn lại.</p>`}
+          <p><b>Tín hiệu dòng tiền</b> (trọng số 10%): ${bd.dong_tien_label ? `tín hiệu hiện tại là <b>"${bd.dong_tien_label}"</b>` : "không có dữ liệu (tính mặc định trung lập)"} → mức <b>${lvl(bd.dong_tien)}</b> (điểm quy đổi ${bd.dong_tien}/100).</p>
         </div>
         <div class="detail-card">
-          <h4>Công thức tổng</h4>
-          <p>Score = (SMDT_vs_ngành×32 + Động_lượng_SMDT×30${hasRank ? " + Xếp_hạng_cùng_ngành×18" : ""}${hasPrice ? " + Động_lượng_giá×10" : ""} + Dòng_tiền×10) ÷ tổng_trọng_số_đang_dùng</p>
-          <p>Xếp hạng: ≥70 MUA MẠNH · ≥55 MUA · ≥45 TRUNG LẬP · ≥30 BÁN · &lt;30 BÁN MẠNH</p>
-          <div class="detail-conclusion">Score = <span class="num">${r.score !== undefined ? r.score.toFixed(1) : "—"}</span> → ${ratingBadge(r.score, r.rating)}</div>
+          <h4>Cách gộp thành điểm tổng</h4>
+          <p>Điểm tổng là trung bình cộng của 5 điểm trên, nhưng mỗi điểm được "cân" theo mức độ quan trọng của nó (trọng số): dòng tiền vào ngành nặng nhất (32%), rồi đến đà dòng tiền (30%), xếp hạng ngành (18%), còn giá và tín hiệu dòng tiền mỗi cái 10%. Yếu tố nào thiếu dữ liệu thì bỏ qua, phần trọng số còn lại chia đều cho các yếu tố có dữ liệu.</p>
+          <p>Điểm càng cao thì khuyến nghị càng tích cực: ≥70 <b>MUA MẠNH</b> · ≥55 <b>MUA</b> · ≥45 <b>TRUNG LẬP</b> · ≥30 <b>BÁN</b> · &lt;30 <b>BÁN MẠNH</b>.</p>
+          <div class="detail-conclusion">Điểm tổng = <span class="num">${r.score !== undefined ? r.score.toFixed(1) : "—"}</span> → ${ratingBadge(r.score, r.rating)}</div>
         </div>
       </div>`;
 
