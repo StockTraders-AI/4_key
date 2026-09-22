@@ -532,7 +532,7 @@ const RATING_CLASS = {
 };
 function ratingBadge(score, rating){
   if (score === undefined || score === null) return `<span class="flag">—</span>`;
-  return `<span class="badge ${RATING_CLASS[rating]||''}">${score.toFixed(1)} (${rating})</span>`;
+  return `<span class="badge ${RATING_CLASS[rating]||''}">${score.toFixed(1)}</span>`;
 }
 function dmy(iso){ const [y,m,d]=iso.split("-"); return `${d}/${m}`; }
 function renderSortedList(sorted, pickIdx){
