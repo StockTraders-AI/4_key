@@ -1,0 +1,465 @@
+<title>4-Key Explorer</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#F6F4EF; --surface:#FFFFFF; --surface-2:#EFEBE2;
+  --border:#E1DCCF; --border-strong:#C9C2AF;
+  --text:#232019; --text-2:#5B5648; --text-3:#8B8574;
+  --accent:#3D6B5C; --accent-ink:#F2FBF7; --accent-weak:#E1EEE8;
+  --good-bg:#E7F3E1; --good-fg:#2A5C1E;
+  --warn-bg:#FBF0DB; --warn-fg:#7A5410;
+  --info-bg:#E5EEF8; --info-fg:#1E4E82;
+  --bad-bg:#FBE8E5;  --bad-fg:#8C2A1E;
+  --shadow: 0 1px 2px rgba(35,32,25,.06), 0 4px 14px rgba(35,32,25,.05);
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){
+    --bg:#18170F; --surface:#211F17; --surface-2:#292619;
+    --border:#3A3627; --border-strong:#4C4732;
+    --text:#EFEADF; --text-2:#B9B29B; --text-3:#847C64;
+    --accent:#6FBF9F; --accent-ink:#0E2019; --accent-weak:#233A31;
+    --good-bg:#213821; --good-fg:#8FD98A;
+    --warn-bg:#3A2F14; --warn-fg:#E8C066;
+    --info-bg:#1B2E42; --info-fg:#8FC2EE;
+    --bad-bg:#3A1F1A;  --bad-fg:#F0968A;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#18170F; --surface:#211F17; --surface-2:#292619;
+  --border:#3A3627; --border-strong:#4C4732;
+  --text:#EFEADF; --text-2:#B9B29B; --text-3:#847C64;
+  --accent:#6FBF9F; --accent-ink:#0E2019; --accent-weak:#233A31;
+  --good-bg:#213821; --good-fg:#8FD98A;
+  --warn-bg:#3A2F14; --warn-fg:#E8C066;
+  --info-bg:#1B2E42; --info-fg:#8FC2EE;
+  --bad-bg:#3A1F1A;  --bad-fg:#F0968A;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 56px}
+h1{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
+.sub{color:var(--text-2);font-size:13.5px;margin:0 0 22px;line-height:1.55}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
+.searchbar{display:flex;gap:10px;padding:16px;flex-wrap:wrap;align-items:center}
+.searchbar input{
+  flex:1;min-width:160px;background:var(--surface-2);border:1px solid var(--border-strong);
+  border-radius:9px;padding:11px 14px;font-size:16px;font-weight:600;letter-spacing:.02em;
+  color:var(--text);text-transform:uppercase;font-family:"JetBrains Mono",monospace;
+}
+.searchbar input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.searchbar button{
+  background:var(--accent);color:var(--accent-ink);border:none;border-radius:9px;
+  padding:11px 20px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+.searchbar button:active{transform:scale(.98)}
+.hint{color:var(--text-3);font-size:12.5px;padding:0 16px 14px}
+.hint b{color:var(--text-2);font-weight:600}
+.msg{padding:34px 20px;text-align:center;color:var(--text-2);font-size:14px}
+.msg b{color:var(--text)}
+
+.result{display:flex;flex-direction:column;gap:18px;margin-top:20px}
+.head-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ticker-name{font-size:26px;font-weight:700;letter-spacing:-.01em}
+.branch-name{color:var(--text-2);font-size:13.5px}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.stat .label{font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.stat .value{font-size:22px;font-weight:700;font-family:"JetBrains Mono",monospace}
+.stat .value small{font-size:13px;font-weight:500;color:var(--text-2)}
+.stat.accent{background:var(--accent-weak)}
+.stat.accent .value{color:var(--accent)}
+
+.thresh{padding:16px}
+.thresh h3{margin:0 0 8px;font-size:14px}
+.thresh-row{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:10px}
+.thresh-item{font-size:13px;color:var(--text-2)}
+.thresh-item b{color:var(--text);font-family:"JetBrains Mono",monospace}
+.sorted-list{
+  font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--text-2);
+  background:var(--surface-2);border-radius:8px;padding:10px 12px;line-height:1.9;
+  overflow-x:auto;white-space:nowrap;
+}
+.sorted-list .pick{background:var(--accent);color:var(--accent-ink);padding:1px 5px;border-radius:4px;font-weight:700}
+
+.tabs{display:flex;gap:6px;padding:12px 16px 0}
+.tab{
+  padding:7px 14px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;cursor:pointer;
+  color:var(--text-2);border:1px solid transparent;
+}
+.tab.active{background:var(--surface-2);color:var(--text);border-color:var(--border);border-bottom-color:var(--surface-2)}
+.tablewrap{overflow-x:auto;border-top:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
+th{
+  text-align:left;padding:9px 10px;background:var(--surface-2);color:var(--text-3);
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;
+  position:sticky;top:0;border-bottom:1px solid var(--border);white-space:nowrap;
+}
+td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;font-family:"JetBrains Mono",monospace}
+tr:last-child td{border-bottom:none}
+tr.diff td{background:var(--warn-bg)}
+td.num{text-align:right}
+.badge{
+  display:inline-block;padding:3px 9px;border-radius:100px;font-size:11.5px;font-weight:600;
+  font-family:Inter,sans-serif;white-space:nowrap;
+}
+.b-good{background:var(--good-bg);color:var(--good-fg)}
+.b-warn{background:var(--warn-bg);color:var(--warn-fg)}
+.b-info{background:var(--info-bg);color:var(--info-fg)}
+.b-bad{background:var(--bad-bg);color:var(--bad-fg)}
+.flag{font-size:10.5px;color:var(--text-3);font-family:Inter,sans-serif}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:14px 16px;font-size:12px;color:var(--text-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+tr.row-click{cursor:pointer}
+tr.row-click:hover td{background:var(--surface-2)}
+tr.selected td{background:var(--accent-weak)!important}
+
+.detail{padding:18px 16px;border-top:1px solid var(--border);background:var(--surface-2)}
+.detail h3{margin:0 0 2px;font-size:15px}
+.detail .detail-sub{color:var(--text-2);font-size:12.5px;margin:0 0 14px}
+.detail-tabs{display:flex;gap:6px;margin-bottom:14px}
+.detail-tab{
+  padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;
+  color:var(--text-2);background:var(--surface);border:1px solid var(--border);
+}
+.detail-tab.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.detail-pane{display:none}
+.detail-pane.active{display:block}
+.detail-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px}
+.detail-card h4{margin:0 0 10px;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3)}
+.detail-card p{margin:0 0 9px;font-size:13.5px;line-height:1.65;color:var(--text)}
+.detail-card p:last-child{margin-bottom:0}
+.detail-card .num{font-family:"JetBrains Mono",monospace;font-weight:600}
+.detail-conclusion{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.close-detail{
+  float:right;background:none;border:none;color:var(--text-3);font-size:13px;cursor:pointer;
+  font-family:inherit;padding:2px 6px;
+}
+.close-detail:hover{color:var(--text)}
+footer{color:var(--text-3);font-size:11.5px;text-align:center;margin-top:24px;line-height:1.6}
+@media (max-width:520px){
+  .ticker-name{font-size:21px}
+  table{min-width:680px}
+}
+</style>
+
+<div class="wrap">
+  <h1>4-Key Explorer</h1>
+  <p class="sub">Nhập mã cổ phiếu để xem Nhóm 4-Key 3 tháng gần nhất (06–08/2026), so sánh cách tính hiện tại (chỉ nhìn dấu +/-) với hướng đề xuất (ngưỡng thích ứng theo lịch sử riêng từng mã, phân vị 45%).</p>
+
+  <div class="panel">
+    <div class="searchbar">
+      <input id="tickerInput" type="text" placeholder="Nhập mã, ví dụ TCB" maxlength="10" autocomplete="off">
+      <button id="runBtn">Xem</button>
+    </div>
+    <div class="hint">Dữ liệu thử nghiệm hiện có cho: <b>TCB</b>, <b>GAS</b>, <b>VIX</b>.</div>
+  </div>
+
+  <div id="output"></div>
+
+  <footer>Dữ liệu SMDT thật lấy từ hệ thống, tháng 6–8/2026. Tính bằng script thử nghiệm riêng — chưa áp dụng vào code chính thức.</footer>
+</div>
+
+<script>
+const DATASET = {
+  TCB: {
+    branch: "Ngân hàng thương mại truyền thống",
+    dates: ["01/06","02/06","03/06","04/06","05/06","08/06","09/06","10/06","11/06","12/06","15/06","16/06","17/06","18/06","19/06","22/06","23/06","24/06","25/06","26/06","29/06","30/06","01/07","02/07","03/07","06/07","07/07","08/07","09/07","10/07","13/07","14/07","15/07","16/07","17/07","20/07","21/07","22/07","23/07","24/07","27/07","28/07","29/07","30/07","31/07","03/08","04/08","05/08","06/08","07/08","10/08","11/08","12/08","13/08","14/08","17/08","18/08","19/08","20/08","21/08","24/08","25/08","26/08","27/08","28/08"],
+    ticker: [-1.54,5.15,14.08,15.00,15.06,18.38,21.60,17.65,16.27,5.69,7.18,1.71,3.33,8.85,17.77,20.15,52.16,56.59,79.61,85.25,94.91,92.47,92.45,92.37,94.03,88.71,82.60,85.39,85.86,87.03,92.93,91.42,79.95,82.72,75.70,81.99,53.93,49.00,32.78,27.66,14.07,11.76,1.31,15.81,12.01,18.97,23.47,23.50,23.27,34.40,74.31,93.37,106.90,119.91,111.17,96.49,93.01,78.70,66.41,64.06,62.53,65.78,97.77,105.82,110.18],
+    branchv: [57.40,59.07,62.46,38.69,0.99,0.48,4.88,-3.65,-6.41,8.49,3.71,-5.53,-3.65,0.75,8.60,11.58,21.91,17.00,17.35,18.55,27.68,24.42,27.54,24.94,24.69,26.49,17.55,26.99,32.30,-6.54,24.07,31.35,-4.21,39.82,30.90,90.57,33.83,92.60,111.73,98.49,77.65,69.14,40.97,49.53,61.46,54.73,58.06,55.65,49.92,72.74,54.13,41.47,33.00,17.05,29.52,-20.49,-12.70,-26.17,-19.94,-1.46,8.88,15.61,30.38,33.02,37.51]
+  },
+  GAS: {
+    branch: "Phân phối xăng dầu & khí đốt",
+    dates: ["01/06","02/06","03/06","04/06","05/06","08/06","09/06","10/06","11/06","12/06","15/06","16/06","17/06","18/06","19/06","22/06","23/06","24/06","25/06","26/06","29/06","30/06","01/07","02/07","03/07","06/07","07/07","08/07","09/07","10/07","13/07","14/07","15/07","16/07","17/07","20/07","21/07","22/07","23/07","24/07","27/07","28/07","29/07","30/07","31/07","03/08","04/08","05/08","06/08","07/08","10/08","11/08","12/08","13/08","14/08","17/08","18/08","19/08","20/08","21/08","24/08","25/08","26/08","27/08","28/08"],
+    ticker: [74.54,73.49,65.56,62.80,61.10,52.59,37.21,-25.21,-22.60,-15.95,-9.56,-6.92,-4.35,4.73,9.44,12.18,19.22,25.06,24.66,21.41,21.93,20.29,20.70,16.26,17.78,20.15,19.54,23.45,36.54,26.07,23.43,30.86,30.23,29.12,31.57,35.18,87.75,95.08,98.33,96.40,91.67,86.01,83.38,87.20,69.57,57.33,58.25,65.08,26.09,67.38,123.61,92.77,96.96,95.84,103.45,97.38,91.34,83.32,77.88,80.64,98.80,104.79,101.09,100.62,98.58],
+    branchv: [74.49,73.15,64.97,61.79,59.45,49.83,33.16,-25.99,-22.46,-15.64,-9.37,-6.78,-4.21,4.83,9.50,12.24,19.30,25.15,24.74,21.54,22.29,20.71,21.19,16.57,18.21,20.64,20.31,24.33,38.08,26.91,24.10,31.79,30.98,30.11,32.87,36.94,90.08,96.75,99.71,98.43,92.28,88.20,85.47,89.23,71.87,61.00,61.63,67.65,31.60,70.85,123.70,94.85,98.41,96.19,102.94,97.10,91.21,83.08,77.19,78.94,97.13,103.47,100.59,100.78,98.67]
+  },
+  VIX: {
+    branch: "Môi giới chứng khoán",
+    dates: ["01/06","02/06","03/06","04/06","05/06","08/06","09/06","10/06","11/06","12/06","15/06","16/06","17/06","18/06","19/06","22/06","23/06","24/06","25/06","26/06","29/06","30/06","01/07","02/07","03/07","06/07","07/07","08/07","09/07","10/07","13/07","14/07","15/07","16/07","17/07","20/07","21/07","22/07","23/07","24/07","27/07","28/07","29/07","30/07","31/07","03/08","04/08","05/08","06/08","07/08","10/08","11/08","12/08","13/08","14/08","17/08","18/08","19/08","20/08","21/08","24/08","25/08","26/08","27/08","28/08"],
+    ticker: [101.96,98.53,82.93,67.53,41.50,12.89,7.59,-2.63,5.50,10.04,16.40,14.92,14.86,17.91,14.72,19.59,22.31,24.05,11.97,5.31,3.97,7.00,10.73,14.38,20.33,21.93,24.37,27.16,34.81,48.33,46.86,30.48,39.71,67.02,31.23,61.03,64.08,109.79,124.85,108.53,105.04,102.79,90.70,100.84,94.41,80.84,84.29,86.52,80.20,67.83,58.86,72.92,59.58,56.57,96.23,69.11,58.48,0.53,-18.80,6.39,29.11,51.54,75.16,52.12,49.63],
+    branchv: [104.47,101.84,79.69,63.91,41.98,25.45,21.95,5.51,8.02,12.51,23.25,19.42,17.33,24.16,15.59,22.90,25.75,30.33,10.72,3.94,-1.60,2.91,2.18,23.86,72.09,82.70,97.89,108.84,106.55,101.34,96.45,80.42,77.17,83.27,74.74,81.33,73.67,80.43,92.97,89.93,94.93,98.35,89.50,90.95,66.39,52.40,39.01,22.67,12.55,0.76,-6.99,8.85,8.35,8.58,21.53,12.91,14.70,8.37,1.53,17.62,26.36,31.40,41.17,29.16,34.90]
+  }
+};
+
+const LB = 3, PCTL = 0.45, MIN_SAMPLES = 10;
+
+const KEYS = {
+  "11": {name:"Đúng sóng - Đúng ngành", rec:"MUA", cls:"b-good"},
+  "10": {name:"Đúng sóng - Sai ngành",  rec:"CÂN NHẮC", cls:"b-warn"},
+  "01": {name:"Sai sóng - Đúng ngành",  rec:"THEO DÕI", cls:"b-info"},
+  "00": {name:"Sai sóng - Sai ngành",   rec:"TRÁNH", cls:"b-bad"},
+};
+function keyOf(rw, rb){ return KEYS[(rw?"1":"0") + (rb?"1":"0")]; }
+
+function percentile(sortedVals, q){
+  const idx = Math.min(Math.floor(sortedVals.length * q), sortedVals.length - 1);
+  return sortedVals[idx];
+}
+
+function computeAll(tickerVals, branchVals){
+  const n = tickerVals.length;
+  const rows = [];
+  let prevW = null, prevB = null;
+  for (let i = 0; i < n; i++){
+    if (i < LB){ rows.push(null); continue; }
+    const dt = tickerVals[i] - tickerVals[i - LB];
+    const db = branchVals[i] - branchVals[i - LB];
+
+    const oldKey = keyOf(dt > 0, db > 0);
+
+    const histT = [], histB = [];
+    for (let j = LB; j <= i; j++){
+      histT.push(Math.abs(tickerVals[j] - tickerVals[j - LB]));
+      histB.push(Math.abs(branchVals[j] - branchVals[j - LB]));
+    }
+    const sortedT = [...histT].sort((a,b)=>a-b);
+    const sortedB = [...histB].sort((a,b)=>a-b);
+    const thT = histT.length >= MIN_SAMPLES ? percentile(sortedT, PCTL) : 0;
+    const thB = histB.length >= MIN_SAMPLES ? percentile(sortedB, PCTL) : 0;
+
+    const usedT = Math.abs(dt) >= thT;
+    const usedB = Math.abs(db) >= thB;
+    const rw = usedT ? (dt > 0) : (prevW !== null ? prevW : dt > 0);
+    const rb = usedB ? (db > 0) : (prevB !== null ? prevB : db > 0);
+    const prevKeySnapshot = (prevW !== null && prevB !== null) ? keyOf(prevW, prevB) : null;
+    prevW = rw; prevB = rb;
+    const newKey = keyOf(rw, rb);
+
+    rows.push({
+      i, dt, db, thT, thB,
+      usedT, usedB,
+      actT: usedT ? "cập nhật" : "giữ nguyên",
+      actB: usedB ? "cập nhật" : "giữ nguyên",
+      oldKey, newKey, prevKeySnapshot,
+      smdtT: tickerVals[i], smdtB: branchVals[i],
+      smdtTPrev: tickerVals[i - LB], smdtBPrev: branchVals[i - LB],
+      sortedT, sortedB,
+      nHist: histT.length,
+    });
+  }
+  return rows;
+}
+
+function flipsOf(rows, field){
+  const valid = rows.filter(r => r !== null).map(r => r[field].name);
+  let f = 0;
+  for (let i = 1; i < valid.length; i++) if (valid[i] !== valid[i-1]) f++;
+  return { flips: f, n: valid.length, streak: valid.length ? (valid.length/(f+1)) : 0 };
+}
+
+function fmt(v){ return (v>=0?"+":"") + v.toFixed(2); }
+function fmt2(v){ return v.toFixed(2); }
+
+function renderSortedList(sorted, pickIdx){
+  return sorted.map((v,i) => i===pickIdx ? `<span class="pick">${v.toFixed(2)}</span>` : v.toFixed(2)).join(", ");
+}
+
+function badge(k){ return `<span class="badge ${k.cls}">${k.name}</span>`; }
+
+const MONTHS = [
+  {label:"Tháng 6", from:0, to:22},
+  {label:"Tháng 7", from:22, to:45},
+  {label:"Tháng 8", from:45, to:65},
+];
+
+function render(sym){
+  const data = DATASET[sym];
+  const out = document.getElementById("output");
+  if (!data){
+    out.innerHTML = `<div class="panel msg">Chưa có dữ liệu thử nghiệm cho mã <b>${sym}</b>.<br>Hiện chỉ có: <b>TCB</b>, <b>GAS</b>, <b>VIX</b>.</div>`;
+    return;
+  }
+  const rows = computeAll(data.ticker, data.branchv);
+  const oldStat = flipsOf(rows, "oldKey");
+  const newStat = flipsOf(rows, "newKey");
+  const reduction = oldStat.flips ? Math.round((1 - newStat.flips/oldStat.flips) * 1000)/10 : 0;
+
+  let html = `
+  <div class="result">
+    <div class="head-row">
+      <div>
+        <div class="ticker-name">${sym}</div>
+        <div class="branch-name">${data.branch}</div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Số lần đổi — cách cũ</div><div class="value">${oldStat.flips}<small> / ${oldStat.n} phiên</small></div></div>
+      <div class="stat accent"><div class="label">Số lần đổi — cách mới</div><div class="value">${newStat.flips}<small> / ${newStat.n} phiên</small></div></div>
+      <div class="stat"><div class="label">Giảm nhiễu</div><div class="value">${reduction}%</div></div>
+      <div class="stat"><div class="label">Độ dài TB mỗi nhóm</div><div class="value">${oldStat.streak.toFixed(1)}<small> → ${newStat.streak.toFixed(1)} phiên</small></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="legend">
+        <span><span class="dot" style="background:var(--good-fg)"></span>Đúng sóng - Đúng ngành (MUA)</span>
+        <span><span class="dot" style="background:var(--warn-fg)"></span>Đúng sóng - Sai ngành (CÂN NHẮC)</span>
+        <span><span class="dot" style="background:var(--info-fg)"></span>Sai sóng - Đúng ngành (THEO DÕI)</span>
+        <span><span class="dot" style="background:var(--bad-fg)"></span>Sai sóng - Sai ngành (TRÁNH)</span>
+      </div>
+      <div class="tabs" id="tabs"></div>
+      <div class="tablewrap"><table id="dataTable"></table></div>
+      <div id="detailPanel"></div>
+    </div>
+  </div>`;
+
+  out.innerHTML = html;
+
+  const tabsEl = document.getElementById("tabs");
+  const tableEl = document.getElementById("dataTable");
+
+  function renderMonth(mIdx){
+    tabsEl.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active", i===mIdx));
+    const m = MONTHS[mIdx];
+    let thead = `<tr>
+      <th>Ngày</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
+      <th>Key — cách cũ</th><th>Key — cách mới</th>
+    </tr>`;
+    let tbody = "";
+    for (let i = m.from; i < m.to; i++){
+      const r = rows[i];
+      if (!r) continue;
+      const diff = r.oldKey.name !== r.newKey.name;
+      tbody += `<tr class="${diff?'diff':''} row-click" data-i="${i}">
+        <td>${data.dates[i]}</td>
+        <td class="num">${fmt2(r.smdtT)}</td>
+        <td class="num">${fmt(r.dt)}</td>
+        <td class="num">${r.thT.toFixed(2)} <span class="flag">(${r.actT})</span></td>
+        <td class="num">${fmt(r.db)}</td>
+        <td class="num">${r.thB.toFixed(2)} <span class="flag">(${r.actB})</span></td>
+        <td>${badge(r.oldKey)}</td>
+        <td>${badge(r.newKey)}</td>
+      </tr>`;
+    }
+    tableEl.innerHTML = thead + tbody;
+    document.getElementById("detailPanel").innerHTML = "";
+    tableEl.querySelectorAll("tr.row-click").forEach(tr => {
+      tr.addEventListener("click", () => {
+        tableEl.querySelectorAll("tr").forEach(x => x.classList.remove("selected"));
+        tr.classList.add("selected");
+        showDetail(sym, +tr.dataset.i);
+      });
+    });
+  }
+
+  tabsEl.innerHTML = MONTHS.map((m,i)=>`<div class="tab" data-i="${i}">${m.label}</div>`).join("");
+  tabsEl.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => renderMonth(+t.dataset.i)));
+  renderMonth(2);
+
+  function showDetail(sym2, idx){
+    const r = rows[idx];
+    const date_ = data.dates[idx] + "/2026";
+    const dateP = data.dates[idx - LB] + "/2026";
+    const idxT = Math.min(Math.floor(r.sortedT.length * PCTL), r.sortedT.length - 1);
+    const idxB = Math.min(Math.floor(r.sortedB.length * PCTL), r.sortedB.length - 1);
+
+    const oldWaveWord = r.dt > 0 ? "đúng sóng" : "sai sóng";
+    const oldBranchWord = r.db > 0 ? "đúng ngành" : "sai ngành";
+
+    function prevWord(isWave){
+      const label = isWave ? ["đúng sóng","sai sóng"] : ["đúng ngành","sai ngành"];
+      if (!r.prevKeySnapshot) return isWave ? (r.dt>0?label[0]:label[1]) : (r.db>0?label[0]:label[1]);
+      return isWave ? (r.prevKeySnapshot.name.startsWith("Đúng sóng")?label[0]:label[1])
+                    : (r.prevKeySnapshot.name.includes("Đúng ngành")?label[0]:label[1]);
+    }
+
+    function stepThreshold(dim, delta, th, used, sorted, pickIdx, n, isWave){
+      const label = isWave ? ["đúng sóng","sai sóng"] : ["đúng ngành","sai ngành"];
+      const concl = used
+        ? `độ lớn <span class="num">${Math.abs(delta).toFixed(2)}%</span> ≥ ngưỡng → tin là biến động <b>thật</b> → kết luận <b>"${delta>0?label[0]:label[1]}"</b>`
+        : `độ lớn <span class="num">${Math.abs(delta).toFixed(2)}%</span> &lt; ngưỡng → coi là <b>nhiễu</b> → giữ nguyên kết luận phiên trước: <b>"${prevWord(isWave)}"</b>`;
+      return `
+        <div class="detail-card">
+          <h4>Ngưỡng ${dim}</h4>
+          <p>Lấy <span class="num">${n}</span> phiên lịch sử gần nhất tính đến ${date_}, tính độ lớn biến động 3 phiên (|delta|) tại từng phiên, sắp xếp từ nhỏ đến lớn:</p>
+          <div class="sorted-list">${renderSortedList(sorted, pickIdx)}</div>
+          <p>Vị trí phân vị 45% = <span class="num">int(${n} × 0.45) = ${pickIdx}</span> (đếm từ 0) → giá trị tại vị trí đó = <span class="num">${sorted[pickIdx].toFixed(2)}</span> → <b>Ngưỡng ${dim} = ${th.toFixed(2)}%</b></p>
+          <p>So sánh: ${concl}.</p>
+        </div>`;
+    }
+
+    const oldPane = `
+      <div class="detail-pane" id="paneOld">
+        <div class="detail-card">
+          <h4>Dữ liệu gốc</h4>
+          <p>SMDT mã hôm nay (${date_}) = <span class="num">${fmt2(r.smdtT)}%</span>, 3 phiên trước (${dateP}) = <span class="num">${fmt2(r.smdtTPrev)}%</span>.</p>
+          <p>SMDT ngành hôm nay = <span class="num">${fmt2(r.smdtB)}%</span>, 3 phiên trước = <span class="num">${fmt2(r.smdtBPrev)}%</span>.</p>
+        </div>
+        <div class="detail-card">
+          <h4>Tính delta</h4>
+          <p>delta mã = ${fmt2(r.smdtT)} − ${fmt2(r.smdtTPrev)} = <span class="num">${fmt(r.dt)}%</span></p>
+          <p>delta ngành = ${fmt2(r.smdtB)} − ${fmt2(r.smdtBPrev)} = <span class="num">${fmt(r.db)}%</span></p>
+        </div>
+        <div class="detail-card">
+          <h4>Quy tắc hiện tại đang áp dụng</h4>
+          <p>Cách hiện tại chỉ nhìn dấu của delta, không quan tâm độ lớn, không có ngưỡng tối thiểu, và không nhớ kết luận của phiên trước.</p>
+          <p>delta mã ${fmt(r.dt)}% là số ${r.dt>0?"dương":"âm"} → kết luận ngay là <b>"${oldWaveWord}"</b>.</p>
+          <p>delta ngành ${fmt(r.db)}% là số ${r.db>0?"dương":"âm"} → kết luận ngay là <b>"${oldBranchWord}"</b>.</p>
+          <div class="detail-conclusion">Kết luận theo cách hiện tại: ${badge(r.oldKey)}</div>
+        </div>
+      </div>`;
+
+    const newPane = `
+      <div class="detail-pane active" id="paneNew">
+        <div class="detail-card">
+          <h4>Dữ liệu gốc</h4>
+          <p>SMDT mã hôm nay (${date_}) = <span class="num">${fmt2(r.smdtT)}%</span>, 3 phiên trước (${dateP}) = <span class="num">${fmt2(r.smdtTPrev)}%</span>.</p>
+          <p>SMDT ngành hôm nay = <span class="num">${fmt2(r.smdtB)}%</span>, 3 phiên trước = <span class="num">${fmt2(r.smdtBPrev)}%</span>.</p>
+        </div>
+        <div class="detail-card">
+          <h4>Tính delta</h4>
+          <p>delta mã = ${fmt2(r.smdtT)} − ${fmt2(r.smdtTPrev)} = <span class="num">${fmt(r.dt)}%</span></p>
+          <p>delta ngành = ${fmt2(r.smdtB)} − ${fmt2(r.smdtBPrev)} = <span class="num">${fmt(r.db)}%</span></p>
+        </div>
+        ${stepThreshold("mã", r.dt, r.thT, r.usedT, r.sortedT, idxT, r.nHist, true)}
+        ${stepThreshold("ngành", r.db, r.thB, r.usedB, r.sortedB, idxB, r.nHist, false)}
+        <div class="detail-card">
+          <h4>Kết luận theo cách đề xuất</h4>
+          <p>Chiều mã → <b>${r.usedT ? (r.dt>0?"đúng sóng":"sai sóng") : prevWord(true)}</b> (${r.actT}). Chiều ngành → <b>${r.usedB ? (r.db>0?"đúng ngành":"sai ngành") : prevWord(false)}</b> (${r.actB}).</p>
+          <div class="detail-conclusion">${badge(r.newKey)}</div>
+        </div>
+      </div>`;
+
+    const html = `
+      <div class="detail">
+        <button class="close-detail" id="closeDetail">Đóng ✕</button>
+        <h3>Chi tiết cách tính — ${sym2}, ngày ${date_}</h3>
+        <p class="detail-sub">Mọi con số dưới đây đều tính lại riêng cho đúng phiên này.</p>
+        <div class="detail-tabs">
+          <div class="detail-tab active" data-pane="paneNew">Cách tính đề xuất</div>
+          <div class="detail-tab" data-pane="paneOld">Cách tính hiện tại</div>
+        </div>
+        ${newPane}
+        ${oldPane}
+      </div>`;
+    const panel = document.getElementById("detailPanel");
+    panel.innerHTML = html;
+    panel.querySelectorAll(".detail-tab").forEach(t => {
+      t.addEventListener("click", () => {
+        panel.querySelectorAll(".detail-tab").forEach(x=>x.classList.remove("active"));
+        panel.querySelectorAll(".detail-pane").forEach(x=>x.classList.remove("active"));
+        t.classList.add("active");
+        document.getElementById(t.dataset.pane).classList.add("active");
+      });
+    });
+    document.getElementById("closeDetail").addEventListener("click", () => { panel.innerHTML = ""; tableEl.querySelectorAll("tr").forEach(x=>x.classList.remove("selected")); });
+    panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+  }
+}
+
+document.getElementById("runBtn").addEventListener("click", () => {
+  const v = document.getElementById("tickerInput").value.trim().toUpperCase();
+  if (v) render(v);
+});
+document.getElementById("tickerInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("runBtn").click();
+});
+document.getElementById("tickerInput").value = "TCB";
+render("TCB");
+</script>
