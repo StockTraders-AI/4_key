@@ -81,6 +81,12 @@ def init_db(conn: sqlite3.Connection) -> None:
         content TEXT,
         PRIMARY KEY (ticker, date)
     );
+    CREATE TABLE IF NOT EXISTS cashflow_branch (
+        branch_path TEXT,
+        date TEXT,
+        content TEXT,
+        PRIMARY KEY (branch_path, date)
+    );
     CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
         value TEXT
@@ -152,6 +158,32 @@ def fetch_cashflow(ticker: str) -> list[tuple[str, str]]:
     return sorted(by_date.items())
 
 
+def fetch_cashflow_branch(path: str) -> list[tuple[str, str]]:
+    try:
+        res = requests.post(
+            f"{API_BASE}/service/data/getCashFlowBranch",
+            params={"path": path},
+            timeout=REQUEST_TIMEOUT,
+        )
+        res.raise_for_status()
+        data = res.json()
+    except Exception as exc:
+        print(f"  [LOI cashflow nganh] {path}: {exc}")
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for item in data:
+        d = str(item.get("date", ""))[:10]
+        entries = item.get("cashFlowBranchDatas") or []
+        if d and entries:
+            content = entries[0].get("content")
+            if content:
+                out.append((d, content))
+    by_date = {d: c for d, c in out}
+    return sorted(by_date.items())
+
+
 def fetch_smdt(*, ticker: str | None = None, path: str | None = None, base_date: str) -> list[tuple[str, float]]:
     params = {"n": HISTORY_SESSIONS, "baseDate": base_date}
     if ticker:
@@ -183,7 +215,7 @@ def main() -> None:
     conn = sqlite3.connect(DB_PATH)
     init_db(conn)
 
-    print(f"=== Buoc 1/5: lay ngành cho {len(TICKERS)} mã ===")
+    print(f"=== Buoc 1/6: lay ngành cho {len(TICKERS)} mã ===")
     ticker_branch: dict[str, dict] = {}
     for i, t in enumerate(TICKERS, 1):
         branch = fetch_branch(t)
@@ -202,7 +234,7 @@ def main() -> None:
     print(f"-> Lấy được ngành cho {len(ticker_branch)}/{len(TICKERS)} mã")
 
     unique_paths = sorted({b["path"] for b in ticker_branch.values()})
-    print(f"\n=== Buoc 2/5: lay SMDT ngành cho {len(unique_paths)} ngành duy nhất ===")
+    print(f"\n=== Buoc 2/6: lay SMDT ngành cho {len(unique_paths)} ngành duy nhất ===")
     for i, path in enumerate(unique_paths, 1):
         points = fetch_smdt(path=path, base_date=today)
         for d, v in points:
@@ -216,7 +248,7 @@ def main() -> None:
     conn.commit()
     print(f"-> Xong SMDT ngành")
 
-    print(f"\n=== Buoc 3/5: lay SMDT mã cho {len(ticker_branch)} mã ===")
+    print(f"\n=== Buoc 3/6: lay SMDT mã cho {len(ticker_branch)} mã ===")
     ok_count = 0
     for i, t in enumerate(ticker_branch, 1):
         points = fetch_smdt(ticker=t, base_date=today)
@@ -233,7 +265,7 @@ def main() -> None:
     conn.commit()
     print(f"-> Lấy được SMDT cho {ok_count}/{len(ticker_branch)} mã")
 
-    print(f"\n=== Buoc 4/5: lay GIA cho {len(ticker_branch)} mã ===")
+    print(f"\n=== Buoc 4/6: lay GIA cho {len(ticker_branch)} mã ===")
     ok_price = 0
     for i, t in enumerate(ticker_branch, 1):
         points = fetch_price(t, today)
@@ -250,7 +282,7 @@ def main() -> None:
     conn.commit()
     print(f"-> Lấy được giá cho {ok_price}/{len(ticker_branch)} mã")
 
-    print(f"\n=== Buoc 5/5: lay DONG TIEN cho {len(ticker_branch)} mã ===")
+    print(f"\n=== Buoc 5/6: lay DONG TIEN mã cho {len(ticker_branch)} mã ===")
     ok_cf = 0
     for i, t in enumerate(ticker_branch, 1):
         points = fetch_cashflow(t)
@@ -265,7 +297,24 @@ def main() -> None:
             print(f"  ... {i}/{len(ticker_branch)}")
             conn.commit()
     conn.commit()
-    print(f"-> Lấy được dòng tiền cho {ok_cf}/{len(ticker_branch)} mã")
+    print(f"-> Lấy được dòng tiền mã cho {ok_cf}/{len(ticker_branch)} mã")
+
+    print(f"\n=== Buoc 6/6: lay DONG TIEN ngành cho {len(unique_paths)} ngành duy nhất ===")
+    ok_cfb = 0
+    for i, path in enumerate(unique_paths, 1):
+        points = fetch_cashflow_branch(path)
+        if points:
+            ok_cfb += 1
+        for d, c in points:
+            conn.execute(
+                "INSERT OR REPLACE INTO cashflow_branch (branch_path, date, content) VALUES (?, ?, ?)",
+                (path, d, c),
+            )
+        if i % 10 == 0:
+            print(f"  ... {i}/{len(unique_paths)}")
+            conn.commit()
+    conn.commit()
+    print(f"-> Lấy được dòng tiền ngành cho {ok_cfb}/{len(unique_paths)} ngành")
 
     conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_updated', ?)", (today,))
     conn.commit()

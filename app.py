@@ -92,6 +92,15 @@ def db_lookup_cashflow(ticker: str) -> dict[str, str]:
     return {r["date"]: r["content"] for r in rows}
 
 
+def db_lookup_cashflow_branch(branch_path: str) -> dict[str, str]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT date, content FROM cashflow_branch WHERE branch_path = ? ORDER BY date", (branch_path,)
+    ).fetchall()
+    conn.close()
+    return {r["date"]: r["content"] for r in rows}
+
+
 def db_lookup_peer_smdt_by_date(branch_path: str, exclude_ticker: str) -> dict[str, list[float]]:
     """Cho tung ngay, tra ve danh sach SMDT cua cac ma KHAC cung nganh (peer) -
     du lieu nay da co san trong bang smdt_ticker (khong can goi them API nao)."""
@@ -354,10 +363,13 @@ def evaluate(ticker: str) -> dict:
 
     price_map = dict(db_lookup_price(ticker))
     cashflow_map = db_lookup_cashflow(ticker)
+    cashflow_branch_map = db_lookup_cashflow_branch(branch["path"])
     peer_smdt_by_date = db_lookup_peer_smdt_by_date(branch["path"], ticker)
     scores_by_date = compute_scores(dates, ticker_vals, branch_vals, price_map, cashflow_map, peer_smdt_by_date)
     for r in display_rows:
         r["price"] = price_map.get(r["date"])
+        r["cashflow_ticker"] = cashflow_map.get(r["date"])
+        r["cashflow_branch"] = cashflow_branch_map.get(r["date"])
         s = scores_by_date.get(r["date"])
         if s:
             r["score"] = s["score"]
@@ -530,7 +542,7 @@ INDEX_HTML = """
     text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;
   }
   .tablewrap{overflow-x:auto;border-top:1px solid var(--border)}
-  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:860px}
   th{
     text-align:left;padding:9px 10px;background:var(--surface-2);color:var(--text-3);
     font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;
@@ -721,19 +733,19 @@ async function render(sym){
     : monthLabel(mks[0]);
 
   const theadHtml = `<tr>
-    <th>Ngày</th><th>Giá</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
+    <th>Ngày</th><th>SMDT ngành</th><th>SMDT mã</th><th>Dòng tiền ngành</th><th>Dòng tiền mã</th><th>Giá</th>
     <th>Key — cách cũ</th><th>Key — cách mới</th><th>Score</th>
   </tr>`;
+  const numOr = (v) => v !== null && v !== undefined ? fmt2(v) : "—";
   function rowHtml(r, i){
     const diff = r.old_group !== r.new_group;
     return `<tr class="${diff?'diff':''} row-click" data-i="${i}">
       <td>${dmy(r.date)}</td>
-      <td class="num">${r.price !== null && r.price !== undefined ? fmt2(r.price) : "—"}</td>
-      <td class="num">${fmt2(r.smdt_ticker)}</td>
-      <td class="num">${fmt(r.delta_ticker)}</td>
-      <td class="num">${r.threshold_ticker.toFixed(2)} <span class="flag">(${r.used_ticker_threshold?"cập nhật":"giữ nguyên"})</span></td>
-      <td class="num">${fmt(r.delta_branch)}</td>
-      <td class="num">${r.threshold_branch.toFixed(2)} <span class="flag">(${r.used_branch_threshold?"cập nhật":"giữ nguyên"})</span></td>
+      <td class="num">${numOr(r.smdt_branch)}</td>
+      <td class="num">${numOr(r.smdt_ticker)}</td>
+      <td>${r.cashflow_branch || "—"}</td>
+      <td>${r.cashflow_ticker || "—"}</td>
+      <td class="num">${numOr(r.price)}</td>
       <td>${badge(r.old_group)}</td>
       <td>${badge(r.new_group)}</td>
       <td>${ratingBadge(r.score, r.rating)}</td>
@@ -769,7 +781,7 @@ async function render(sym){
       const mk = r.date.slice(0,7);
       if (!mks.includes(mk)) return;
       if (mk !== lastMonth) {
-        tbody += `<tr class="month-divider"><td colspan="10">${monthLabel(mk)}</td></tr>`;
+        tbody += `<tr class="month-divider"><td colspan="9">${monthLabel(mk)}</td></tr>`;
         lastMonth = mk;
       }
       tbody += rowHtml(r, i);
