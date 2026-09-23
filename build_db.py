@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-build_db.py - Goi API that lay SMDT ma + nganh cho toan bo 191 ma hien hanh,
-luu vao SQLite (data.db) de app.py doc ra tuc thi, khong can goi API moi lan bam.
+build_db.py - Goi API that lay SMDT ma + nganh, gia, dong tien cho toan bo 191 ma
+hien hanh (toi da lich su co san - gia tu 2020, SMDT tu ~31/12/2024 do gioi han
+cua API), luu vao SQLite (data.db) de app.py doc ra tuc thi, khong can goi API
+moi lan bam.
 
 Chay: python build_db.py
 Nen chay lai dinh ky (VD: cron/scheduled task moi sang sau khi co du lieu phien
@@ -30,7 +32,7 @@ for _stream_name in ("stdout", "stderr"):
 
 API_BASE = "https://stocktradersai.vn"
 REQUEST_TIMEOUT = 20
-HISTORY_SESSIONS = 70  # ~3 thang + it buffer
+HISTORY_SESSIONS = 3000  # lay toi da lich su co (gia tu 2020; SMDT thuc te API chi co tu ~31/12/2024)
 DB_PATH = "data.db"
 
 # 191 ma hien hanh (whitelist)

@@ -24,8 +24,9 @@ app = Flask(__name__)
 
 DB_PATH = Path(__file__).parent / "data.db"
 
-# So phien hien thi tren giao dien (~3 thang giao dich)
-DISPLAY_SESSIONS = 65
+# So phien hien thi toi da tren giao dien - de rat cao de hien thi toan bo lich su
+# co trong data.db (khong con gioi han ~3 thang nhu truoc).
+DISPLAY_SESSIONS = 5000
 
 LOOKBACK = 3
 PERCENTILE = 0.45
@@ -542,7 +543,7 @@ INDEX_HTML = """
 <body>
 <div class="wrap">
   <h1>4-Key Explorer</h1>
-  <p class="sub">Nhập bất kỳ mã cổ phiếu nào để xem Nhóm 4-Key ~3 tháng gần nhất, so sánh cách tính hiện tại (chỉ nhìn dấu +/-) với hướng đề xuất (ngưỡng thích ứng theo lịch sử riêng từng mã, phân vị 45%). Dữ liệu lấy trực tiếp từ API thời gian thực.</p>
+  <p class="sub">Nhập bất kỳ mã cổ phiếu nào để xem Nhóm 4-Key toàn bộ lịch sử có trong cơ sở dữ liệu, so sánh cách tính hiện tại (chỉ nhìn dấu +/-) với hướng đề xuất (ngưỡng thích ứng theo lịch sử riêng từng mã, phân vị 45%). Dữ liệu đọc từ data.db, build sẵn từ API stocktradersai.vn.</p>
 
   <div class="panel">
     <div class="searchbar">
