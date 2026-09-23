@@ -719,7 +719,38 @@ async function render(sym){
     ? `${monthLabel(mks[0])} — ${monthLabel(mks[mks.length-1])}`
     : monthLabel(mks[0]);
 
+  const theadHtml = `<tr>
+    <th>Ngày</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
+    <th>Key — cách cũ</th><th>Key — cách mới</th><th>Score</th>
+  </tr>`;
+  function rowHtml(r, i){
+    const diff = r.old_group !== r.new_group;
+    return `<tr class="${diff?'diff':''} row-click" data-i="${i}">
+      <td>${dmy(r.date)}</td>
+      <td class="num">${fmt2(r.smdt_ticker)}</td>
+      <td class="num">${fmt(r.delta_ticker)}</td>
+      <td class="num">${r.threshold_ticker.toFixed(2)} <span class="flag">(${r.used_ticker_threshold?"cập nhật":"giữ nguyên"})</span></td>
+      <td class="num">${fmt(r.delta_branch)}</td>
+      <td class="num">${r.threshold_branch.toFixed(2)} <span class="flag">(${r.used_branch_threshold?"cập nhật":"giữ nguyên"})</span></td>
+      <td>${badge(r.old_group)}</td>
+      <td>${badge(r.new_group)}</td>
+      <td>${ratingBadge(r.score, r.rating)}</td>
+    </tr>`;
+  }
+  function attachRowClicks(){
+    tableEl.querySelectorAll("tr.row-click").forEach(tr => {
+      tr.addEventListener("click", () => {
+        tableEl.querySelectorAll("tr").forEach(x => x.classList.remove("selected"));
+        tr.classList.add("selected");
+        showDetail(+tr.dataset.i);
+      });
+    });
+  }
+
+  let singleDateMode = false;
+
   function renderPage(pIdx){
+    singleDateMode = false;
     const mks = monthPages[pIdx];
     pagerEl.innerHTML = `
       <div class="page-nav">
@@ -730,10 +761,6 @@ async function render(sym){
     document.getElementById("pagePrev").addEventListener("click", () => renderPage(pIdx-1));
     document.getElementById("pageNext").addEventListener("click", () => renderPage(pIdx+1));
 
-    let thead = `<tr>
-      <th>Ngày</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
-      <th>Key — cách cũ</th><th>Key — cách mới</th><th>Score</th>
-    </tr>`;
     let tbody = "";
     let lastMonth = null;
     rows.forEach((r, i) => {
@@ -743,28 +770,40 @@ async function render(sym){
         tbody += `<tr class="month-divider"><td colspan="9">${monthLabel(mk)}</td></tr>`;
         lastMonth = mk;
       }
-      const diff = r.old_group !== r.new_group;
-      tbody += `<tr class="${diff?'diff':''} row-click" data-i="${i}">
-        <td>${dmy(r.date)}</td>
-        <td class="num">${fmt2(r.smdt_ticker)}</td>
-        <td class="num">${fmt(r.delta_ticker)}</td>
-        <td class="num">${r.threshold_ticker.toFixed(2)} <span class="flag">(${r.used_ticker_threshold?"cập nhật":"giữ nguyên"})</span></td>
-        <td class="num">${fmt(r.delta_branch)}</td>
-        <td class="num">${r.threshold_branch.toFixed(2)} <span class="flag">(${r.used_branch_threshold?"cập nhật":"giữ nguyên"})</span></td>
-        <td>${badge(r.old_group)}</td>
-        <td>${badge(r.new_group)}</td>
-        <td>${ratingBadge(r.score, r.rating)}</td>
-      </tr>`;
+      tbody += rowHtml(r, i);
     });
-    tableEl.innerHTML = thead + tbody;
+    tableEl.innerHTML = theadHtml + tbody;
     document.getElementById("detailPanel").innerHTML = "";
-    tableEl.querySelectorAll("tr.row-click").forEach(tr => {
-      tr.addEventListener("click", () => {
-        tableEl.querySelectorAll("tr").forEach(x => x.classList.remove("selected"));
-        tr.classList.add("selected");
-        showDetail(+tr.dataset.i);
-      });
-    });
+    attachRowClicks();
+  }
+
+  function goToFullPageForIndex(idx){
+    const mk = rows[idx].date.slice(0,7);
+    let pageIdx = monthPages.findIndex(mks => mks.includes(mk));
+    if (pageIdx === -1) pageIdx = monthPages.length - 1;
+    renderPage(pageIdx);
+    const tr = tableEl.querySelector(`tr.row-click[data-i="${idx}"]`);
+    if (tr) {
+      tableEl.querySelectorAll("tr").forEach(x => x.classList.remove("selected"));
+      tr.classList.add("selected");
+      tr.scrollIntoView({block:"center", behavior:"smooth"});
+    }
+  }
+
+  function renderSingleDate(idx){
+    singleDateMode = true;
+    const r = rows[idx];
+    pagerEl.innerHTML = `
+      <div class="page-nav">
+        <button id="viewAllBtn">Xem tất cả ↺</button>
+      </div>
+      <div class="page-label">Đang xem 1 phiên — ${monthLabel(r.date.slice(0,7))}, ngày ${dmy(r.date)}</div>`;
+    document.getElementById("viewAllBtn").addEventListener("click", () => goToFullPageForIndex(idx));
+
+    tableEl.innerHTML = theadHtml + rowHtml(r, idx);
+    document.getElementById("detailPanel").innerHTML = "";
+    attachRowClicks();
+    tableEl.querySelector(`tr.row-click[data-i="${idx}"]`)?.classList.add("selected");
   }
 
   renderPage(monthPages.length - 1);
@@ -794,16 +833,7 @@ async function render(sym){
   function jumpToIndex(idx, openDetail=true){
     idx = Math.max(0, Math.min(rows.length - 1, idx));
     selectedIdx = idx;
-    const mk = rows[idx].date.slice(0,7);
-    let pageIdx = monthPages.findIndex(mks => mks.includes(mk));
-    if (pageIdx === -1) pageIdx = monthPages.length - 1;
-    renderPage(pageIdx);
-    const tr = tableEl.querySelector(`tr.row-click[data-i="${idx}"]`);
-    if (tr) {
-      tableEl.querySelectorAll("tr").forEach(x => x.classList.remove("selected"));
-      tr.classList.add("selected");
-      tr.scrollIntoView({block:"center", behavior:"smooth"});
-    }
+    renderSingleDate(idx);
     if (openDetail) showDetail(idx);
     updateDateNav();
   }
