@@ -478,6 +478,44 @@ INDEX_HTML = """
     color:var(--text-2);border:1px solid transparent;
   }
   .tab.active{background:var(--surface-2);color:var(--text);border-color:var(--border);border-bottom-color:var(--surface-2)}
+
+  .date-nav{position:relative;display:inline-flex;align-items:center;gap:8px;margin:14px 16px 0}
+  .date-nav-btn{
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;
+    padding:6px 10px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;
+  }
+  .date-nav-btn:disabled{opacity:.4;cursor:default}
+  .date-current{
+    display:flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:700;color:var(--accent);
+    font-family:"JetBrains Mono",monospace;
+  }
+  .calendar-popup{
+    position:absolute;top:calc(100% + 8px);left:0;z-index:20;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);
+    padding:14px;width:280px;
+  }
+  .calendar-popup.hidden{display:none}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .cal-head button{background:transparent;border:none;color:var(--text-2);font-size:16px;cursor:pointer;padding:4px 8px;border-radius:6px;font-family:inherit}
+  .cal-head button:hover:not(:disabled){background:var(--surface-2)}
+  .cal-head button:disabled{opacity:.3;cursor:default}
+  .cal-month-label{font-size:14px;font-weight:700;color:var(--text)}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10.5px;color:var(--text-3);font-weight:600;margin-bottom:4px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cal-day{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;
+    font-size:12.5px;font-family:"JetBrains Mono",monospace;color:var(--text);cursor:pointer;border:none;background:transparent;
+  }
+  .cal-day:hover:not(:disabled){background:var(--surface-2)}
+  .cal-day.outside{color:var(--text-3);opacity:.4}
+  .cal-day:disabled{cursor:default;opacity:.3}
+  .cal-day.selected{background:var(--accent);color:var(--accent-ink);font-weight:700}
+  .cal-footer{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .cal-footer button{background:none;border:none;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .cal-today-btn{color:var(--accent)}
+  .cal-close-btn{color:var(--text-2)}
+
   .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px 0;flex-wrap:wrap}
   .pager .page-label{font-size:13px;font-weight:600;color:var(--text)}
   .pager .page-nav{display:flex;gap:8px}
@@ -646,6 +684,24 @@ async function render(sym){
         <span><span class="dot" style="background:var(--info-fg)"></span>Sai sóng - Đúng ngành (THEO DÕI)</span>
         <span><span class="dot" style="background:var(--bad-fg)"></span>Sai sóng - Sai ngành (TRÁNH)</span>
       </div>
+      <div class="date-nav">
+        <button class="date-nav-btn" id="dayPrev">‹</button>
+        <button class="date-current" id="dateOpen">📅 <span id="dateOpenLabel"></span></button>
+        <button class="date-nav-btn" id="dayNext">›</button>
+        <div class="calendar-popup hidden" id="calendarPopup">
+          <div class="cal-head">
+            <button id="calPrevMonth">‹</button>
+            <div class="cal-month-label" id="calMonthLabel"></div>
+            <button id="calNextMonth">›</button>
+          </div>
+          <div class="cal-weekdays"><span>CN</span><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="cal-footer">
+            <button class="cal-today-btn" id="calToday">Hôm nay</button>
+            <button class="cal-close-btn" id="calClose">Đóng</button>
+          </div>
+        </div>
+      </div>
       <div class="pager" id="pager"></div>
       <div class="tablewrap"><table id="dataTable"></table></div>
       <div id="detailPanel"></div>
@@ -712,6 +768,103 @@ async function render(sym){
   }
 
   renderPage(monthPages.length - 1);
+
+  // ==== Bo chon ngay (date nav + calendar popup) ====
+  const rowIndexByDate = new Map(rows.map((r,i) => [r.date, i]));
+  const fullDmy = (iso) => { const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; };
+  const pad2 = (n) => String(n).padStart(2,"0");
+  const ymd = (y,m,d) => `${y}-${pad2(m+1)}-${pad2(d)}`;
+  let selectedIdx = rows.length - 1;
+  let calYear, calMonth;
+
+  const dateOpenBtn = document.getElementById("dateOpen");
+  const dateOpenLabel = document.getElementById("dateOpenLabel");
+  const dayPrevBtn = document.getElementById("dayPrev");
+  const dayNextBtn = document.getElementById("dayNext");
+  const calendarPopup = document.getElementById("calendarPopup");
+  const calMonthLabel = document.getElementById("calMonthLabel");
+  const calGrid = document.getElementById("calGrid");
+
+  function updateDateNav(){
+    dateOpenLabel.textContent = fullDmy(rows[selectedIdx].date);
+    dayPrevBtn.disabled = selectedIdx <= 0;
+    dayNextBtn.disabled = selectedIdx >= rows.length - 1;
+  }
+
+  function jumpToIndex(idx, openDetail=true){
+    idx = Math.max(0, Math.min(rows.length - 1, idx));
+    selectedIdx = idx;
+    const mk = rows[idx].date.slice(0,7);
+    let pageIdx = monthPages.findIndex(mks => mks.includes(mk));
+    if (pageIdx === -1) pageIdx = monthPages.length - 1;
+    renderPage(pageIdx);
+    const tr = tableEl.querySelector(`tr.row-click[data-i="${idx}"]`);
+    if (tr) {
+      tableEl.querySelectorAll("tr").forEach(x => x.classList.remove("selected"));
+      tr.classList.add("selected");
+      tr.scrollIntoView({block:"center", behavior:"smooth"});
+    }
+    if (openDetail) showDetail(idx);
+    updateDateNav();
+  }
+
+  function renderCalendar(){
+    calMonthLabel.textContent = `Tháng ${calMonth+1}, ${calYear}`;
+    const startWeekday = new Date(Date.UTC(calYear, calMonth, 1)).getUTCDay();
+    const daysInMonth = new Date(Date.UTC(calYear, calMonth+1, 0)).getUTCDate();
+    const prevMonthDays = new Date(Date.UTC(calYear, calMonth, 0)).getUTCDate();
+    const selectedDate = rows[selectedIdx].date;
+    let cells = "";
+    for (let i = 0; i < 42; i++){
+      const dayOffset = i - startWeekday + 1;
+      let y = calYear, m = calMonth, d, outside = false;
+      if (dayOffset < 1) { d = prevMonthDays + dayOffset; m -= 1; outside = true; }
+      else if (dayOffset > daysInMonth) { d = dayOffset - daysInMonth; m += 1; outside = true; }
+      else { d = dayOffset; }
+      if (m < 0) { m = 11; y -= 1; } else if (m > 11) { m = 0; y += 1; }
+      const dateStr = ymd(y, m, d);
+      const hasData = rowIndexByDate.has(dateStr);
+      const isSelected = dateStr === selectedDate;
+      cells += `<button class="cal-day ${outside?"outside":""} ${isSelected?"selected":""}" data-date="${dateStr}" ${hasData?"":"disabled"}>${d}</button>`;
+    }
+    calGrid.innerHTML = cells;
+    calGrid.querySelectorAll(".cal-day:not(:disabled)").forEach(btn => {
+      btn.addEventListener("click", () => {
+        jumpToIndex(rowIndexByDate.get(btn.dataset.date));
+        calendarPopup.classList.add("hidden");
+      });
+    });
+  }
+
+  dayPrevBtn.addEventListener("click", () => jumpToIndex(selectedIdx - 1));
+  dayNextBtn.addEventListener("click", () => jumpToIndex(selectedIdx + 1));
+  dateOpenBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [y,m] = rows[selectedIdx].date.split("-");
+    calYear = parseInt(y,10); calMonth = parseInt(m,10) - 1;
+    renderCalendar();
+    calendarPopup.classList.toggle("hidden");
+  });
+  document.getElementById("calPrevMonth").addEventListener("click", () => {
+    calMonth -= 1; if (calMonth < 0) { calMonth = 11; calYear -= 1; }
+    renderCalendar();
+  });
+  document.getElementById("calNextMonth").addEventListener("click", () => {
+    calMonth += 1; if (calMonth > 11) { calMonth = 0; calYear += 1; }
+    renderCalendar();
+  });
+  document.getElementById("calToday").addEventListener("click", () => {
+    jumpToIndex(rows.length - 1);
+    calendarPopup.classList.add("hidden");
+  });
+  document.getElementById("calClose").addEventListener("click", () => calendarPopup.classList.add("hidden"));
+  document.addEventListener("click", (e) => {
+    if (!calendarPopup.classList.contains("hidden") && !e.target.closest(".date-nav")) {
+      calendarPopup.classList.add("hidden");
+    }
+  });
+
+  updateDateNav();
 
   function showDetail(idx){
     const r = rows[idx];
