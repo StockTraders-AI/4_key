@@ -357,6 +357,7 @@ def evaluate(ticker: str) -> dict:
     peer_smdt_by_date = db_lookup_peer_smdt_by_date(branch["path"], ticker)
     scores_by_date = compute_scores(dates, ticker_vals, branch_vals, price_map, cashflow_map, peer_smdt_by_date)
     for r in display_rows:
+        r["price"] = price_map.get(r["date"])
         s = scores_by_date.get(r["date"])
         if s:
             r["score"] = s["score"]
@@ -720,13 +721,14 @@ async function render(sym){
     : monthLabel(mks[0]);
 
   const theadHtml = `<tr>
-    <th>Ngày</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
+    <th>Ngày</th><th>Giá</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
     <th>Key — cách cũ</th><th>Key — cách mới</th><th>Score</th>
   </tr>`;
   function rowHtml(r, i){
     const diff = r.old_group !== r.new_group;
     return `<tr class="${diff?'diff':''} row-click" data-i="${i}">
       <td>${dmy(r.date)}</td>
+      <td class="num">${r.price !== null && r.price !== undefined ? fmt2(r.price) : "—"}</td>
       <td class="num">${fmt2(r.smdt_ticker)}</td>
       <td class="num">${fmt(r.delta_ticker)}</td>
       <td class="num">${r.threshold_ticker.toFixed(2)} <span class="flag">(${r.used_ticker_threshold?"cập nhật":"giữ nguyên"})</span></td>
@@ -767,7 +769,7 @@ async function render(sym){
       const mk = r.date.slice(0,7);
       if (!mks.includes(mk)) return;
       if (mk !== lastMonth) {
-        tbody += `<tr class="month-divider"><td colspan="9">${monthLabel(mk)}</td></tr>`;
+        tbody += `<tr class="month-divider"><td colspan="10">${monthLabel(mk)}</td></tr>`;
         lastMonth = mk;
       }
       tbody += rowHtml(r, i);
