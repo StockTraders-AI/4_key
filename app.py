@@ -478,6 +478,18 @@ INDEX_HTML = """
     color:var(--text-2);border:1px solid transparent;
   }
   .tab.active{background:var(--surface-2);color:var(--text);border-color:var(--border);border-bottom-color:var(--surface-2)}
+  .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px 0;flex-wrap:wrap}
+  .pager .page-label{font-size:13px;font-weight:600;color:var(--text)}
+  .pager .page-nav{display:flex;gap:8px}
+  .pager button{
+    background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+  }
+  .pager button:disabled{opacity:.4;cursor:default}
+  tr.month-divider td{
+    background:var(--surface-2);color:var(--text-3);font-weight:700;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;
+  }
   .tablewrap{overflow-x:auto;border-top:1px solid var(--border)}
   table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
   th{
@@ -634,25 +646,47 @@ async function render(sym){
         <span><span class="dot" style="background:var(--info-fg)"></span>Sai sóng - Đúng ngành (THEO DÕI)</span>
         <span><span class="dot" style="background:var(--bad-fg)"></span>Sai sóng - Sai ngành (TRÁNH)</span>
       </div>
-      <div class="tabs" id="tabs"></div>
+      <div class="pager" id="pager"></div>
       <div class="tablewrap"><table id="dataTable"></table></div>
       <div id="detailPanel"></div>
     </div>
   </div>`;
 
-  const tabsEl = document.getElementById("tabs");
+  const pagerEl = document.getElementById("pager");
   const tableEl = document.getElementById("dataTable");
 
-  function renderMonth(mIdx){
-    tabsEl.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active", i===mIdx));
-    const mk = monthKeys[mIdx];
+  // gom moi 3 thang lien tiep thanh 1 trang, phan trang thay vi liet ke het thang
+  const MONTHS_PER_PAGE = 3;
+  const monthPages = [];
+  for (let i = 0; i < monthKeys.length; i += MONTHS_PER_PAGE) monthPages.push(monthKeys.slice(i, i + MONTHS_PER_PAGE));
+  const pageLabel = (mks) => mks.length > 1
+    ? `${monthLabel(mks[0])} — ${monthLabel(mks[mks.length-1])}`
+    : monthLabel(mks[0]);
+
+  function renderPage(pIdx){
+    const mks = monthPages[pIdx];
+    pagerEl.innerHTML = `
+      <div class="page-nav">
+        <button id="pagePrev" ${pIdx<=0?"disabled":""}>‹ Trước</button>
+        <button id="pageNext" ${pIdx>=monthPages.length-1?"disabled":""}>Sau ›</button>
+      </div>
+      <div class="page-label">${pageLabel(mks)} <span class="flag">(trang ${pIdx+1}/${monthPages.length})</span></div>`;
+    document.getElementById("pagePrev").addEventListener("click", () => renderPage(pIdx-1));
+    document.getElementById("pageNext").addEventListener("click", () => renderPage(pIdx+1));
+
     let thead = `<tr>
       <th>Ngày</th><th>SMDT mã</th><th>Δ mã</th><th>Ngưỡng mã</th><th>Δ ngành</th><th>Ngưỡng ngành</th>
       <th>Key — cách cũ</th><th>Key — cách mới</th><th>Score</th>
     </tr>`;
     let tbody = "";
+    let lastMonth = null;
     rows.forEach((r, i) => {
-      if (r.date.slice(0,7) !== mk) return;
+      const mk = r.date.slice(0,7);
+      if (!mks.includes(mk)) return;
+      if (mk !== lastMonth) {
+        tbody += `<tr class="month-divider"><td colspan="9">${monthLabel(mk)}</td></tr>`;
+        lastMonth = mk;
+      }
       const diff = r.old_group !== r.new_group;
       tbody += `<tr class="${diff?'diff':''} row-click" data-i="${i}">
         <td>${dmy(r.date)}</td>
@@ -677,9 +711,7 @@ async function render(sym){
     });
   }
 
-  tabsEl.innerHTML = monthKeys.map((mk,i)=>`<div class="tab" data-i="${i}">${monthLabel(mk)}</div>`).join("");
-  tabsEl.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => renderMonth(+t.dataset.i)));
-  renderMonth(monthKeys.length - 1);
+  renderPage(monthPages.length - 1);
 
   function showDetail(idx){
     const r = rows[idx];
